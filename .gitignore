@@ -1,4 +1,4 @@
-/atu-env/*
+atu-env/
 # Environments
 .env
 .venv
