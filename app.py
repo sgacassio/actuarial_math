@@ -53,9 +53,20 @@ DEF_INTEREST_RATE = df_interest[df_interest['month'] \
 
 callbacks_vars.i_rate_reserve =  DEF_INTEREST_RATE
 
-main_fig = go.Figure(data=[go.Surface()])
-reserve_chart = go.Figure()
-table_chart = go.Figure()
+main_fig = go.Figure(data=[go.Surface()],
+                     layout=go.Layout(title="Dotal Misto"))
+
+reserve_chart = go.Figure(layout = go.Layout(
+        title= "Reservas",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+        ))
+
+table_chart = go.Figure(layout = go.Layout(
+        title= "Comparação de Tábuas",
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)'
+        ))
 
 tables = list(df['table'].unique())
 table_options = [{'value':tb, 'label':tb} for i, tb in enumerate(tables)]
@@ -651,7 +662,7 @@ def update_value_click(nclicks, prod,
                                      value_bnf = value_bnf)
 
             reserve_chart = generate_reserves_plot(handler_copy=handler,
-                                   value_bnf=value_bnf)
+                                                    value_bnf=value_bnf)
 
 
         except:

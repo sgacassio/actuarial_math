@@ -499,12 +499,23 @@ def generate_reserves_plot(handler_copy, value_bnf):
         except:
             pass
 
+    l1 = len(t_)
+    l2 = len(retro)
+    l3 = len(prosp)
+    t_ = t_[:min(l1,l2,l3)]
+    retro = retro[:min(l1,l2,l3)]
+    prosp = prosp[:min(l1,l2,l3)]
+
     reserves_df = pd.DataFrame().from_dict({'t':t_,
                                             'Retrospectiva':retro,
                                             'Prospectiva':prosp})
 
+    layout = go.Layout(title= "Reservas",
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)'
+            )
+    fig = go.Figure(layout=layout)
 
-    fig = go.Figure()
     fig.add_trace(go.Scatter(x=reserves_df['t'].values,
                              y=reserves_df['Retrospectiva'].values,
                              mode='lines',
@@ -546,6 +557,12 @@ def generate_tables_plot(handler_copy,
                                    antecip_pay=antecip_pay)
 
         pna_.append(handler_copy_.pna*value_bnf)
-    fig = go.Figure([go.Bar(x=tables, y=pna_)])
+
+    layout = go.Layout(title= "Comparação de Tábuas",
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)'
+            )
+
+    fig = go.Figure([go.Bar(x=tables, y=pna_)], layout=layout)
 
     return fig
