@@ -28,8 +28,8 @@ Clone the git repo, then install the requirements with pip
 
 ```
 
-git clone https://github.com/plotly/dash-sample-apps
-cd dash-sample-apps/apps/dash-oil-and-gas
+git clone https://github.com/sgacassio/actuarial_math.git
+cd actuarial_math
 pip install -r requirements.txt
 
 ```
