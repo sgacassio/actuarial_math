@@ -384,22 +384,6 @@ app.layout = html.Div(
                                         ),
                                     ],
                                 ),
-                                html.Div(
-                                    id="reserv-irate-input-outer",
-                                    children=[
-                                        html.Label("Taxa (t)", className="control_label"),
-                                        dcc.Input(
-                                            id="reserv-rate-input",
-                                            type="number",
-                                            min=0,
-                                            max=1,
-                                            step=0.0001,
-                                            debounce=True,
-                                            value=DEF_INTEREST_RATE,
-                                            style={"width":"100%"}
-                                        ),
-                                    ],
-                                ),
                             ],
                         ),
                     ],
@@ -568,7 +552,9 @@ def bind_prod_value(product, product_value):
         Output("reservpText", "children"),
         Output("reservrText", "children"),
         Output("main_graph", "figure"),
-        Output("individual_graph", "figure")
+        Output("individual_graph", "figure"),
+        Output("paidupText", "children"),
+        Output("extendedText", "children")
     ],
     [
         Input("calc_button", "n_clicks"),
@@ -586,8 +572,7 @@ def bind_prod_value(product, product_value):
         Input("dif-p-input", "value"),
         Input("antecip_p_selector", "value"),
         Input("whole_p_life_selector", "value"),
-        Input("reserv-input", "value"),
-        Input("reserv-rate-input", "value")
+        Input("reserv-input", "value")
     ],
 )
 def update_value_click(nclicks, prod,
@@ -595,7 +580,7 @@ def update_value_click(nclicks, prod,
                        term_bnf, dif_bnf, value_bnf,
                        postecip_bnf, whole_life_bnf,
                        term_pay, dif_pay, postecip_pay,
-                       whole_life_pay, reserv_t, reserv_rate):
+                       whole_life_pay, reserv_t):
 
     global main_fig
     global handler
@@ -637,8 +622,8 @@ def update_value_click(nclicks, prod,
                              term_pay=term_pay,
                              antecip_pay=antecip_pay)
 
-            a = handler.calc_reserves(reserv_t, 'retrosp', reserv_rate)
-            a = handler.calc_reserves(reserv_t, 'prosp', reserv_rate)
+            a = handler.calc_reserves(reserv_t, 'retrosp', i_rate)
+            a = handler.calc_reserves(reserv_t, 'prosp', i_rate)
 
             main_fig = generate_main_plot(handler_copy=handler,
                                           dif_benef=dif_bnf,
@@ -677,24 +662,16 @@ def update_value_click(nclicks, prod,
     r2 = handler.last_retro_reserve*value_bnf \
                  if handler.last_retro_reserve else 0
 
+    s1 = handler.paidup*value_bnf if handler.paidup else 0
+    s2 = handler.extended if handler.extended else [0]
+
+    if len(s2) > 1:
+        s2 = [str(s2[0]) + "/" + str(real_br_money_mask(s2[1]*value_bnf))]
+
     return [[real_br_money_mask(v1)], [real_br_money_mask(v2)],
              main_fig, [real_br_money_mask(r1)],
-             [real_br_money_mask(r2)], reserve_chart, table_chart]
-
-@app.callback(
-    [
-        Output("paidupText", "children"),
-        Output("extendedText", "children")
-    ],
-    [
-        Input("reserv-input", "value"),
-        Input("reserv-rate-input", "value")
-    ]
-)
-def update_reserves(t, rate):
-    filled = False if handler.pup is None else True
-    return [[real_br_money_mask(1)],[real_br_money_mask(2)]]
-    #if t != callbacks_vars.t or rate != callbacks_vars.i_rate_reserve:
+             [real_br_money_mask(r2)], reserve_chart, table_chart,
+             [real_br_money_mask(s1)], s2]
 
 # Main
 if __name__ == "__main__":

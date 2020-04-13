@@ -70,6 +70,11 @@ class InsuranceHandler():
         self.last_prosp_reserve = None
         self.last_retro_reserve = None
 
+        #paid up
+        self.paidup = None
+        #extended
+        self.extended = None
+
     def __pv_calc__(self, n, i=0):
         '''
             This method calculates the present value factor v
@@ -275,6 +280,79 @@ class InsuranceHandler():
         V = (P*a - A)*E
         return V
 
+    def __calc_paidup__(self, A, V, i, k, t, n, m, prod, benef_antecip):
+        '''
+            This method calculates a paidup insurance, annuity or endowment
+            Input:
+                A: product net single premium until t
+                V: reserve until t
+            Output:
+
+        '''
+        if i < t < k:
+            self.paidup = V/A
+        else:
+            self.paidup = 0
+
+
+        if  i < t < k:
+            if prod == 'A' or prod == 'a':
+                #search for the m which minimize the distance between V and the new A
+                #As the time unit measure is year the difference between V and A will be > 0
+                values_ = list()
+                for period in range(1, min(m, self.max_age-t)):
+                    try:
+                        prod_values = self.__calc_pup__(n, self.age+t, term=period,
+                                                    antecip=benef_antecip,
+                                                    prod=prod, option = 'normal')
+                        values_.append(abs(V - prod_values))
+                    except:
+                        pass
+
+                if values_:
+                    self.extended = [np.array([values_]).argmin() + 1]
+                else:
+                    self.extended = [0]
+
+            elif prod == 'D':
+                insurance = 0
+                try:
+                    insurance = self.__calc_pup__(n, self.age+t, term=m,
+                                              antecip=benef_antecip,
+                                              prod='A', option = 'normal')
+                except:
+                    pass
+
+                if V >= insurance:
+                    d = 1
+                    try:
+                        d = self.__calc_pup__(0, self.age+t, term=m+n,
+                                          antecip=benef_antecip,
+                                          prod='d', option = 'normal')
+                    except:
+                        pass
+
+                    endowment = (V - insurance) / d
+                    self.extended = [m, endowment]
+                else:
+                    values_ = list()
+                    for period in range(1, min(m, self.max_age-t)):
+                        try:
+                            prod_values = self.__calc_pup__(n, self.age+t, term=period,
+                                                        antecip=benef_antecip,
+                                                        prod='A', option = 'normal')
+                            values_.append(abs(V - prod_values))
+                        except:
+                            pass
+                    if values_:
+                        self.extended = [np.array([values_]).argmin() + 1]
+                    else:
+                        self.extended = [0]
+            elif prod == 'd':
+                self.extended = [0]
+        else:
+            self.extended = [0]
+
     def __calc_prov_prosp__(self, t):
         '''
             This method calculates reserves using the prospective method
@@ -332,7 +410,7 @@ class InsuranceHandler():
         if t > m+n and t > k+i:
             a = 0
             A = 0
-
+        self.__calc_paidup__(A, A - P*a, i, k, t, n, m, prod, benef_antecip)
         V = A - P*a
         return V
 
@@ -426,7 +504,6 @@ class InsuranceHandler():
             self.last_retro_reserve = result
 
         return result
-
 
 def real_br_money_mask(my_value):
     a = '{:,.2f}'.format(float(my_value))
