@@ -41,6 +41,9 @@ Run the app
 python app.py
 
 ```
+In your terminal you will see the app running in your local host. Copy the url and paste in your browser:
+
+![screenshot](screenshot/localhost.png)
 
 ## Screenshots
 
