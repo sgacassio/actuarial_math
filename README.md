@@ -44,4 +44,6 @@ python app.py
 
 ## Screenshots
 
-The following are screenshots for the app in this repo:
+The following is a screenshot for the app in this repo:
+
+![screenshot](screenshot/screen_shot.png)
