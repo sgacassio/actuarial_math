@@ -6,30 +6,56 @@ import dash
 import math
 import datetime as dt
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
-from dash.dependencies import Input, Output, State, ClientsideFunction
+from dash.dependencies import Input, Output
+from dash.dependencies import State, ClientsideFunction
 import dash_core_components as dcc
 import dash_html_components as html
+from calc import InsuranceHandler
+from calc import real_br_money_mask
+from calc import generate_main_plot
+from calc import generate_reserves_plot
+from calc import generate_tables_plot
 
 # Multi-dropdown options
 from controls import PRODUCTS, DEF_PRODUCT, GENDER, DEF_GENDER
+
+class DashCallbackVariables:
+    """Class to store information useful to callbacks"""
+
+    def __init__(self):
+        self.n_clicks = {1: 0, 2: 0}
+
+    def update_n_clicks(self, nclicks, bt_num):
+        self.n_clicks[bt_num] = nclicks
 
 # get relative data folder
 PATH = pathlib.Path(__file__).parent
 DATA_PATH = PATH.joinpath("data").resolve()
 
+df = pd.read_excel(DATA_PATH.joinpath("life_tables.xlsx"))
+df_interest = pd.read_excel(DATA_PATH.joinpath("risk_free.xlsx"))
+
+handler = InsuranceHandler(df)
+callbacks_vars = DashCallbackVariables()
+
 app = dash.Dash(
-    __name__, meta_tags=[{"name": "viewport", "content": "width=device-width"}]
+    __name__, meta_tags=[{"name": "viewport",
+                          "content": "width=device-width"}]
 )
 server = app.server
 
 # Create controls
-df = pd.read_excel(DATA_PATH.joinpath("life_tables.xlsx"))
-df_interest = pd.read_excel(DATA_PATH.joinpath("risk_free.xlsx"))
-
 DEF_INTEREST_RATE = df_interest[df_interest['month'] \
                                 == df_interest['month'].\
                                 max()]['selic_year'].values[0]/100
+
+callbacks_vars.i_rate_reserve =  DEF_INTEREST_RATE
+
+main_fig = go.Figure(data=[go.Surface()])
+reserve_chart = go.Figure()
+table_chart = go.Figure()
 
 tables = list(df['table'].unique())
 table_options = [{'value':tb, 'label':tb} for i, tb in enumerate(tables)]
@@ -98,6 +124,10 @@ app.layout = html.Div(
                                 html.H5(
                                     "Trabalho 1", style={"margin-top": "0px"}
                                 ),
+                                html.H6(
+                                    "Acássio, Beth, Falcão, Kelvin, Lawrance, Murilo",
+                                     style={"margin-top": "0px"}
+                                ),
                             ]
                         )
                     ],
@@ -113,6 +143,11 @@ app.layout = html.Div(
             [
                 html.Div(
                     [
+                        html.Button(
+                            'Calcular',
+                            id = 'calc_button',
+                            type='submit',
+                        ),
                         html.P(
                             "Produto:",
                             className="control_label",
@@ -200,7 +235,7 @@ app.layout = html.Div(
                                     ],
                                 ),
                                 html.Div(
-                                    id="period-selector-outer",
+                                    id="value-selector-outer",
                                     children=[
                                         html.Label("Valor (R$)", className="control_label"),
                                         dcc.Input(
@@ -208,7 +243,8 @@ app.layout = html.Div(
                                                 type="number",
                                                 min=1,
                                                 value=1,
-                                                className="dcc_control"
+                                                className="dcc_control",
+                                                style={"width":"100%"},
                                         ),
                                     ],
                                 ),
@@ -217,21 +253,6 @@ app.layout = html.Div(
                         html.Div(
                             #className="control-row-1",
                             children=[
-                                html.Div(
-                                    id="value-input-outer",
-                                    children=[
-                                        html.Label("Periodicidade", className="control_label"),
-                                        dcc.Dropdown(
-                                                id="period_selector",
-                                                options=[{"value":1, 'label':"Único"},
-                                                         {"value":2, 'label':"Mensal"},
-                                                         {"value":3, 'label':"Anual"}],
-                                                value=3,
-                                                clearable=False,
-                                                className="dcc_control",
-                                        ),
-                                    ],
-                                ),
                                 html.Div(
                                     className="control-row-1",
                                     children=[
@@ -251,7 +272,7 @@ app.layout = html.Div(
                                             children=[
                                                 dcc.Checklist(
                                                     id="whole_life_selector",
-                                                    options=[{"label": "Vitalício", "value": "locked"}],
+                                                    options=[{"label": "Vitalício", "value": "locked", "disabled":True}],
                                                     className="dcc_control",
                                                     value=[],
                                                 ),
@@ -266,7 +287,7 @@ app.layout = html.Div(
                         html.P("Pagamento",
                                className="section-title"),
                         html.Div(
-                            #className="control-row-1",
+                            className="control-row-1",
                             children=[
                                 html.Div(
                                     id="term-p-input-outer",
@@ -275,13 +296,96 @@ app.layout = html.Div(
                                         dcc.Input(
                                             id="term-p-input",
                                             type="number",
-                                            placeholder="Prazo Pagto",
                                             min=0,
                                             max=100,
                                             step=1,
                                             value=1,
                                             style={"width":"100%"}
                                             #className="dcc_control"
+                                        ),
+                                    ],
+                                ),
+                                html.Div(
+                                    id="dif-p-input-outer",
+                                    children=[
+                                        html.Label("Diferimento", className="control_label"),
+                                        dcc.Input(
+                                            id="dif-p-input",
+                                            type="number",
+                                            min=0,
+                                            max=100,
+                                            step=1,
+                                            value=1,
+                                            style={"width":"100%"}
+                                            #className="dcc_control"
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                        html.Div(
+                            className="control-row-1",
+                            children=[
+                                html.Div(
+                                    id="antecip-p-select-outer",
+                                    children=[
+                                        dcc.Checklist(
+                                            id="antecip_p_selector",
+                                            options=[{"label": "Postecipado", "value": "locked"}],
+                                            className="dcc_control",
+                                            value=[],
+                                        ),
+                                    ],
+                                ),
+                                html.Div(
+                                    id="whole-p-select-outer",
+                                    children=[
+                                        dcc.Checklist(
+                                            id="whole_p_life_selector",
+                                            options=[{"label": "Vitalício", "value": "locked"}],
+                                            className="dcc_control",
+                                            value=[],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                        html.Hr(style={"margin-bottom": "0.5em",
+                                       "margin-top": "0.5em"}),
+                        html.P("Reservas",
+                               className="section-title"),
+                                html.Div(
+                                    className="control-row-1",
+                                    children=[
+                                html.Div(
+                                    id="reserv-input-outer",
+                                    children=[
+                                        html.Label("Momento de avaliação (t)", className="control_label"),
+                                        dcc.Input(
+                                            id="reserv-input",
+                                            type="number",
+                                            min=0,
+                                            max=100,
+                                            step=1,
+                                            value=0,
+                                            debounce=True,
+                                            style={"width":"100%"}
+                                        ),
+                                    ],
+                                ),
+                                html.Div(
+                                    id="reserv-irate-input-outer",
+                                    children=[
+                                        html.Label("Taxa (t)", className="control_label"),
+                                        dcc.Input(
+                                            id="reserv-rate-input",
+                                            type="number",
+                                            min=0,
+                                            max=1,
+                                            step=0.0001,
+                                            debounce=True,
+                                            value=DEF_INTEREST_RATE,
+                                            style={"width":"100%"}
                                         ),
                                     ],
                                 ),
@@ -296,27 +400,53 @@ app.layout = html.Div(
                         html.Div(
                             [
                                 html.Div(
-                                    [html.H6(id="well_text"), html.P("Produto")],
-                                    id="wells",
+                                    [html.H6(id="product_text"), html.P("Produto")],
+                                    id="product",
                                     className="mini_container",
                                 ),
                                 html.Div(
-                                    [html.H6(id="gasText"), html.P("Valor (R$)")],
-                                    id="gas",
+                                    [html.H6(id="product_value"), html.P("Valor")],
+                                    id="prod_value",
                                     className="mini_container",
                                 ),
                                 html.Div(
-                                    [html.H6(id="oilText"), html.P("PNA")],
-                                    id="oil",
+                                    [html.H6(id="pnaText"), html.P("PNA")],
+                                    id="pna",
                                     className="mini_container",
                                 ),
                                 html.Div(
-                                    [html.H6(id="waterText"), html.P("PUP")],
-                                    id="water",
+                                    [html.H6(id="pupText"), html.P("PUP")],
+                                    id="pup",
                                     className="mini_container",
                                 ),
                             ],
                             id="info-container",
+                            className="row container-display",
+                        ),
+                        html.Div(
+                            [
+                                html.Div(
+                                    [html.H6(id="reservpText"), html.P("Prospectivo")],
+                                    id="reserv-prosp",
+                                    className="mini_container",
+                                ),
+                                html.Div(
+                                    [html.H6(id="reservrText"), html.P("Retrospectivo")],
+                                    id="reserv-retro",
+                                    className="mini_container",
+                                ),
+                                html.Div(
+                                    [html.H6(id="paidupText"), html.P("Paid-Up")],
+                                    id="paid-up-insur",
+                                    className="mini_container",
+                                ),
+                                html.Div(
+                                    [html.H6(id="extendedText"), html.P("Extended")],
+                                    id="extended-insur",
+                                    className="mini_container",
+                                ),
+                            ],
+                            id="info-container2",
                             className="row container-display",
                         ),
                         html.Div(
@@ -344,19 +474,6 @@ app.layout = html.Div(
             ],
             className="row flex-display",
         ),
-        html.Div(
-            [
-                html.Div(
-                    [dcc.Graph(id="pie_graph")],
-                    className="pretty_container seven columns",
-                ),
-                html.Div(
-                    [dcc.Graph(id="aggregate_graph")],
-                    className="pretty_container five columns",
-                ),
-            ],
-            className="row flex-display",
-        ),
     ],
     id="mainContainer",
     style={"display": "flex", "flex-direction": "column"},
@@ -364,133 +481,210 @@ app.layout = html.Div(
 
 @app.callback(
     [
-        Output("well_text", "children"),
+        Output("age-input", "max")
     ],
-    [Input("product_selector", "value")],
+    [
+        Input("gender_selector", "value"),
+        Input("table_selector", "value")
+    ]
 )
-def update_product_text(product):
-    return [PRODUCTS[product]]
+def filter_dataframe(gender, table):
+    max_age = df.query('gender == "{}" and table == "{}"'. \
+                       format(gender, table))['age'].max()
+    return [max_age]
 
 @app.callback(
     [
-        Output("gasText", "children"),
+        Output("whole_life_selector", "options")
     ],
-    [Input("value-input", "value")],
+    [
+        Input("product_selector", "value")
+    ]
 )
-def update_value_text(value):
-    return ["R$ " + str(value)]
+def disable_whole_life(product):
+    if product == 'D' or product == 'd':
+        return [[{"label": "Vitalício", "value": "locked", 'disabled':True}]]
+    else:
+        return [[{"label": "Vitalício", "value": "locked"}]]
 
 @app.callback(
-[
-Output("count_graph", "figure"),
-],
-[Input("value-input", "value")],
+    [
+        Output("antecip_selector", "options")
+    ],
+    [
+        Input("product_selector", "value")
+    ]
 )
-def update_chart(value):
-    fig = go.Figure(go.Surface(
-    contours = {
-        "x": {"show": True, "start": 1.5, "end": 2, "size": 0.04, "color":"white"},
-        "z": {"show": True, "start": 0.5, "end": 0.8, "size": 0.05}
-    },
-    x = [1,2,3,4,5],
-    y = [1,2,3,4,5],
-    z = [
-        [0, 1, 0, 1, 0],
-        [1, 0, 1, 0, 1],
-        [0, 1, 0, 1, 0],
-        [1, 0, 1, 0, 1],
-        [0, 1, 0, 1, 0]
-    ]))
-    fig.update_layout(
-        scene = {
-            "xaxis": {"nticks": 20},
-            "zaxis": {"nticks": 4},
-            'camera_eye': {"x": 0, "y": -1, "z": 0.5},
-            "aspectratio": {"x": 1, "y": 1, "z": 0.2}
-        })
-    return [fig]
-# Helper functions
-
-def df_filter(table, gender):
-    '''
-    Input: table name, gender
-    Output: Filtered dataframe according to the
-            selected life table and gender
-    '''
-    #Build a query string
-    query = 'gender == "{}" and table == "{}"'.\
-             format(gender, table)
-
-    #Apply a filter and reset the index of the original dataframe
-    df_temp = df.query(query).\
-                 reset_index(drop=True).copy()
-    return df_temp
-
-def pv_calc(i_rate, n):
-    '''
-    Input: Interest rate, array of periods [0,1,2,3,...]
-    Ouput: Array of v's
-    '''
-    return 1/(1+i_rate)**n
-
-def calc_Dx(age, lx, i_rate):
-    '''
-    Input: Array of ages, array with the number of survivals,
-           interest rate
-    Output: Array of commutation Dx for all ages available in the
-            life table
-    '''
-    return lx*pv_calc(i_rate, age)
-
-def calc_Cx(age, dx, i_rate):
-    '''
-    Input: Array of ages, array with the number of deaths,
-               interest rate
-    Output: Array of commutation Cx for all ages available in the
-            life table
-    '''
-    age_ = age + 1
-    return dx*pv_calc(i_rate, age_)
-
-def calc_Mx(Cx, ini=0):
-    '''
-    Input: Array with commutation Cx for all ages
-    Output: Array with commutation Mx for all ages
-    '''
-    size = Cx.shape[0]
-    if ini > size - 1:
-        return 0
+def disable_post(product):
+    if product == 'D' or product == 'd' or product == 'A':
+        return [[{"label": "Postecipado", "value": "locked", "disabled":True}]]
     else:
-        Cx_ = Cx[ini:].copy()
-        return Cx_[::-1].cumsum()[::-1]
+        return [[{"label": "Postecipado", "value": "locked"}]]
 
-def calc_Nx(Dx, ini=0):
-    '''
-    Input: Array with commutation Dx for all ages
-    Output: Array with commutation Nx for all ages
-    '''
-    size = Dx.shape[0]
-    if ini > size - 1:
-        return 0
+@app.callback(
+    [
+        Output("dif-input", "disabled")
+    ],
+    [
+        Input("product_selector", "value")
+    ]
+)
+def disable_diferred(product):
+    if product == 'd':
+        return ['DISABLED']
     else:
-        Dx_ = Dx[ini:].copy()
-        return Dx_[::-1].cumsum()[::-1]
+        return [False]
 
-def commut_calc(df, i_rate, which="Dx"):
-    '''
-    Input: Dataframe with life table (lx and dx must be already
-           calculated), interest rate, commutation (Dx o Cx)
-    Output: Array with either Dx or Cx calculated for all ages
-           available in the life table
-    '''
-    age = df['age'].values
-    lx = df['lx'].values
-    dx = df['dx'].values
+@app.callback(
+    [
+        Output("product_text", "children"),
+        Output("product_value", "children")
+    ],
+    [
+        Input("product_selector", "value"),
+        Input("value-input", "value")
 
-    if which == "Dx":
-        return calc_Dx(age, lx, i_rate)
-    elif which == "Cx":
-        return calc_Cx(age, dx, i_rate)
+    ]
+)
+def bind_prod_value(product, product_value):
+    return [[PRODUCTS[product]],[real_br_money_mask(product_value)]]
+
+@app.callback(
+    [
+        Output("pupText", "children"),
+        Output("pnaText", "children"),
+        Output("count_graph", "figure"),
+        Output("reservpText", "children"),
+        Output("reservrText", "children"),
+        Output("main_graph", "figure"),
+        Output("individual_graph", "figure")
+    ],
+    [
+        Input("calc_button", "n_clicks"),
+        Input("product_selector", "value"),
+        Input("gender_selector", "value"),
+        Input("age-input", "value"),
+        Input("table_selector", "value"),
+        Input("interest-rate-input", "value"),
+        Input("term-input", "value"),
+        Input("dif-input", "value"),
+        Input("value-input", "value"),
+        Input("antecip_selector", "value"),
+        Input("whole_life_selector", "value"),
+        Input("term-p-input", "value"),
+        Input("dif-p-input", "value"),
+        Input("antecip_p_selector", "value"),
+        Input("whole_p_life_selector", "value"),
+        Input("reserv-input", "value"),
+        Input("reserv-rate-input", "value")
+    ],
+)
+def update_value_click(nclicks, prod,
+                       gender, age, table, i_rate,
+                       term_bnf, dif_bnf, value_bnf,
+                       postecip_bnf, whole_life_bnf,
+                       term_pay, dif_pay, postecip_pay,
+                       whole_life_pay, reserv_t, reserv_rate):
+
+    global main_fig
+    global handler
+    global reserve_chart
+    global table_chart
+
+    antecip_bnf = True
+    antecip_pay = True
+
+    if nclicks is None:
+        nclicks = 0
+
+    if nclicks != callbacks_vars.n_clicks[1]:
+        handler.select_table(table, gender)
+        handler.gen_commutations(i_rate)
+
+        if whole_life_bnf:
+            term_bnf = np.inf
+
+        if whole_life_pay:
+            term_pay = np.inf
+
+        if postecip_bnf:
+            antecip_bnf = False
+
+        if postecip_pay:
+            antecip_pay = False
+
+        if prod == 'd':
+            dif_bnf = 0
+
+        try:
+            handler.calc_premium(age=age,
+                             dif_benef=dif_bnf,
+                             term_benef=term_bnf,
+                             antecip_benef=antecip_bnf,
+                             prod=prod,
+                             dif_pay=dif_pay,
+                             term_pay=term_pay,
+                             antecip_pay=antecip_pay)
+
+            a = handler.calc_reserves(reserv_t, 'retrosp', reserv_rate)
+            a = handler.calc_reserves(reserv_t, 'prosp', reserv_rate)
+
+            main_fig = generate_main_plot(handler_copy=handler,
+                                          dif_benef=dif_bnf,
+                                          term_benef=term_bnf,
+                                          product=prod,
+                                          antecip_benef=antecip_bnf,
+                                          value_bnf=value_bnf,
+                                          dif_pay=dif_pay,
+                                          term_pay=term_pay,
+                                          antecip_pay=antecip_pay)
+
+            table_chart = generate_tables_plot(handler_copy=handler,
+                                     gender=gender, age=age,
+                                     i_rate=i_rate, dif_bnf=dif_bnf,
+                                     term_bnf = term_bnf,
+                                     antecip_bnf = antecip_bnf,
+                                     prod = prod,
+                                     dif_pay = dif_pay,
+                                     term_pay = term_pay,
+                                     antecip_pay = antecip_pay,
+                                     value_bnf = value_bnf)
+
+            reserve_chart = generate_reserves_plot(handler_copy=handler,
+                                   value_bnf=value_bnf)
+
+
+        except:
+            pass
+
+        callbacks_vars.update_n_clicks(nclicks, 1)
+
+    v1 = handler.pup*value_bnf if handler.pup else 0
+    v2 = handler.pna*value_bnf if handler.pna else 0
+    r1 = handler.last_prosp_reserve*value_bnf \
+                 if handler.last_prosp_reserve else 0
+    r2 = handler.last_retro_reserve*value_bnf \
+                 if handler.last_retro_reserve else 0
+
+    return [[real_br_money_mask(v1)], [real_br_money_mask(v2)],
+             main_fig, [real_br_money_mask(r1)],
+             [real_br_money_mask(r2)], reserve_chart, table_chart]
+
+@app.callback(
+    [
+        Output("paidupText", "children"),
+        Output("extendedText", "children")
+    ],
+    [
+        Input("reserv-input", "value"),
+        Input("reserv-rate-input", "value")
+    ]
+)
+def update_reserves(t, rate):
+    filled = False if handler.pup is None else True
+    return [[real_br_money_mask(1)],[real_br_money_mask(2)]]
+    #if t != callbacks_vars.t or rate != callbacks_vars.i_rate_reserve:
+
 # Main
 if __name__ == "__main__":
     app.run_server(debug=True)

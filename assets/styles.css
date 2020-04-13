@@ -34,6 +34,9 @@ body {
 .dcc_control {
   margin: 0;
   padding: 5px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   width: calc(100%-40px);
 }
 
@@ -42,6 +45,9 @@ body {
   padding: 10px;
   padding-bottom: 0px;
   margin-bottom: 0px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   width: calc(100%-40px);
 }
 
@@ -123,23 +129,59 @@ body {
   flex-direction: column;
 }
 
-#wells {
+#dif-input {
+  flex:1;
+}
+
+#term-input {
+  flex:1;
+}
+
+#value-input {
+  flex:1;
+}
+
+#product {
   flex: 1;
 }
 
-#gas {
+#paidup {
+  flex:1;
+}
+
+#extended {
+  flex:1;
+}
+
+#prod_value {
   flex: 1;
+}
+
+#reserv-prosp {
+  flex:1;
+}
+
+#reserv-retro {
+  flex:1;
+}
+
+#paid-up-insur {
+  flex:1;
+}
+
+#extended-insur{
+  flex:1;
 }
 
 #aggregate_data {
   align-items: center;
 }
 
-#oil {
+#pna {
   flex: 1;
 }
 
-#water {
+#pup {
   flex: 1;
 }
 
