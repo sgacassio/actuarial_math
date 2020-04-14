@@ -302,7 +302,7 @@ class InsuranceHandler():
                 values_ = list()
                 for period in range(1, min(m, self.max_age-t)):
                     try:
-                        prod_values = self.__calc_pup__(n, self.age+t, term=period,
+                        prod_values = self.__calc_pup__(min(n-t,0), self.age+t, term=period,
                                                     antecip=benef_antecip,
                                                     prod=prod, option = 'normal')
                         values_.append(abs(V - prod_values))
@@ -317,16 +317,22 @@ class InsuranceHandler():
             elif prod == 'D':
                 insurance = 0
                 try:
-                    insurance = self.__calc_pup__(n, self.age+t, term=m,
+                    if t <= n:
+                        insurance = self.__calc_pup__(max(n-t,0), self.age+t, term=m,
                                               antecip=benef_antecip,
                                               prod='A', option = 'normal')
+                    else:
+                        insurance = self.__calc_pup__(0, self.age+t, term=m-t,
+                                              antecip=benef_antecip,
+                                              prod='A', option = 'normal')
+
                 except:
                     pass
 
                 if V >= insurance:
                     d = 1
                     try:
-                        d = self.__calc_pup__(0, self.age+t, term=m+n,
+                        d = self.__calc_pup__(0, self.age+t, term=m+n-t,
                                           antecip=benef_antecip,
                                           prod='d', option = 'normal')
                     except:
@@ -338,7 +344,7 @@ class InsuranceHandler():
                     values_ = list()
                     for period in range(1, min(m, self.max_age-t)):
                         try:
-                            prod_values = self.__calc_pup__(n, self.age+t, term=period,
+                            prod_values = self.__calc_pup__(min(n-t,0), self.age+t, term=period,
                                                         antecip=benef_antecip,
                                                         prod='A', option = 'normal')
                             values_.append(abs(V - prod_values))
@@ -398,6 +404,7 @@ class InsuranceHandler():
         elif t > n + m - adjust_benef:
             A = 0
 
+
         #Adjustment for points with zero reserves
         if t == 0:
             A = 0
@@ -410,6 +417,7 @@ class InsuranceHandler():
         if t > m+n and t > k+i:
             a = 0
             A = 0
+
         self.__calc_paidup__(A, A - P*a, i, k, t, n, m, prod, benef_antecip)
         V = A - P*a
         return V
@@ -620,26 +628,29 @@ def generate_tables_plot(handler_copy,
     tables = ['IBGE 2009', 'BR-EMSsb-v.2015',
               'BR-EMSmt-v.2015', ' AT2000', 'AT-49']
     pna_ =[]
-
+    tbs_ = []
     for tb in tables:
-        handler_copy_.select_table(tb, gender)
-        handler_copy_.gen_commutations(i_rate)
-        handler_copy_.calc_premium(age=age,
-                                   dif_benef=dif_bnf,
-                                   term_benef=term_bnf,
-                                   antecip_benef=antecip_bnf,
-                                   prod=prod,
-                                   dif_pay=dif_pay,
-                                   term_pay=term_pay,
-                                   antecip_pay=antecip_pay)
-
-        pna_.append(handler_copy_.pna*value_bnf)
+        try:
+            handler_copy_.select_table(tb, gender)
+            handler_copy_.gen_commutations(i_rate)
+            handler_copy_.calc_premium(age=age,
+                                       dif_benef=dif_bnf,
+                                       term_benef=term_bnf,
+                                       antecip_benef=antecip_bnf,
+                                       prod=prod,
+                                       dif_pay=dif_pay,
+                                       term_pay=term_pay,
+                                       antecip_pay=antecip_pay)
+            pna_.append(handler_copy_.pna*value_bnf)
+            tbs_.append(tb)
+        except:
+            pass
 
     layout = go.Layout(title= "Comparação de Tábuas",
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)'
             )
 
-    fig = go.Figure([go.Bar(x=tables, y=pna_)], layout=layout)
+    fig = go.Figure([go.Bar(x=tbs_, y=pna_)], layout=layout)
 
     return fig
